@@ -98,7 +98,8 @@ namespace DallasMicrofOperator
             {
                 comboBox6.Items.Add(i);
             }
-            comboBox6.SelectedIndex = int.Parse(set.TermometrID[comboBox1.SelectedIndex]);
+            if(comboBox6.Items.Count > int.Parse(set.TermometrID[comboBox1.SelectedIndex]))
+                comboBox6.SelectedIndex = int.Parse(set.TermometrID[comboBox1.SelectedIndex]);
         }
 
         private void comboBox2_SelectedIndexChanged(object sender, EventArgs e)
