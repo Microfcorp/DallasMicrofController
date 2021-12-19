@@ -129,7 +129,7 @@
             this.имяСервераToolStripMenuItem.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripTextBox1});
             this.имяСервераToolStripMenuItem.Name = "имяСервераToolStripMenuItem";
-            this.имяСервераToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.имяСервераToolStripMenuItem.Size = new System.Drawing.Size(145, 22);
             this.имяСервераToolStripMenuItem.Text = "Имя сервера";
             // 
             // toolStripTextBox1
@@ -141,7 +141,7 @@
             // стартToolStripMenuItem
             // 
             this.стартToolStripMenuItem.Name = "стартToolStripMenuItem";
-            this.стартToolStripMenuItem.Size = new System.Drawing.Size(180, 22);
+            this.стартToolStripMenuItem.Size = new System.Drawing.Size(145, 22);
             this.стартToolStripMenuItem.Text = "Старт";
             this.стартToolStripMenuItem.Click += new System.EventHandler(this.стартToolStripMenuItem_Click);
             // 
@@ -179,6 +179,7 @@
             this.Controls.Add(this.menuStrip1);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MainMenuStrip = this.menuStrip1;
+            this.MinimumSize = new System.Drawing.Size(560, 169);
             this.Name = "Form1";
             this.Text = "DallasMicrofController - Сервер";
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Form1_FormClosing);

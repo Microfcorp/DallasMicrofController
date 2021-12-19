@@ -47,11 +47,17 @@ namespace DallasMicrofController
 
         public void Save()
         {
-            Settings.Save<DallasSettings>(new DallasSettings[] { this }, Path);
+            string prefix = "";
+            if (Parser.Global.FindParamsAndArgs("-p", out prefix))
+                Settings.Save<DallasSettings>(new DallasSettings[] { this }, Path + "-" + prefix);
+            else Settings.Save<DallasSettings>(new DallasSettings[] { this }, Path);
         }
         public static DallasSettings Load()
         {
-           return Settings.Load<DallasSettings>(Path)[0];
+            string prefix = "";
+            if(Parser.Global.FindParamsAndArgs("-p", out prefix))
+                return Settings.Load<DallasSettings>(Path+"-"+prefix)[0];
+            return Settings.Load<DallasSettings>(Path)[0];
         }
     }
     public class Dallas
@@ -123,10 +129,16 @@ namespace DallasMicrofController
             }
         }
 
+        public event EventHandler ConnectError;
+        public event EventHandler TermometrEdit;
+
 
         public void Load()
         {
-            if (Settings.IsFile(DallasSettings.Path))
+            string prefix = "";
+            Parser.Global.FindParamsAndArgs("-p", out prefix);
+
+            if (Settings.IsFile(DallasSettings.Path + (prefix.Length > 1 ? "-" : "") + prefix))
             {
                 Setting = DallasSettings.Load();
             }
@@ -136,12 +148,18 @@ namespace DallasMicrofController
                 Setting.Save();
             }
             //CurrentResolution = Setting.Resolution;
-        }
+        }       
 
         public void WriteCOM(string text)
         {
-            if (IsConnect)
-                _serialPort.WriteLine(text);
+            try
+            {
+                if (IsConnect)
+                    _serialPort.WriteLine(text);
+            }
+            catch {
+                ConnectError?.Invoke(this, new EventArgs());
+            }
         }
 
         public void SendReadTemperature()
@@ -172,7 +190,7 @@ namespace DallasMicrofController
                 reads = _serialPort.ReadTo(";").Replace("\r", "").Trim();
             }
             catch (Exception ex) { return; }
-            if (reads.Contains("Requesting temperatures..."))
+            if (reads.Contains("Requesting temperatures...") && reads.Length < 55)
             {
                 var deviceid = byte.Parse(reads.Split('\n')[1].Split(' ')[1]);
                 Termometrs[deviceid].Temperature = float.Parse(reads.Split('\n')[1].Split(':')[1].Trim().Replace('.', ','));
@@ -180,19 +198,24 @@ namespace DallasMicrofController
             else if (reads.Contains("Informations:"))
             {
                 DevicesOfLines = byte.Parse(reads.Split('\n')[1].Split(' ')[1].Trim());
+                var isneed = DevicesOfLines != Termometrs.Length;
                 var list = Termometrs.ToList();
                 list.RemoveRange(DevicesOfLines, list.Count - DevicesOfLines);
                 Termometrs = list.ToArray();
 
-                var deviceid = byte.Parse(reads.Split('\n')[2].Split(' ')[4].Trim(':'));
-                Termometrs[deviceid].ParasitePowers = reads.Split('\n')[2].Split(':')[1].Trim() == "ON";
-
-                if (reads.Contains("Unable to find address for Device")) Termometrs[deviceid].IsError = true;
-                else
+                for (int i = 0; i < DevicesOfLines; i++)
                 {
-                    Termometrs[deviceid].Address = reads.Split('\n')[3].Split(':')[1].Trim();
-                    Termometrs[deviceid].CurrentResolution = (DallasResolution)byte.Parse(reads.Split('\n')[4].Split(':')[1].Trim());
+                    var deviceid = byte.Parse(reads.Split('\n')[2].Split(' ')[4].Trim(':'));
+                    Termometrs[deviceid].ParasitePowers = reads.Split('\n')[2].Split(':')[1].Trim() == "ON";
+
+                    if (reads.Contains("Unable to find address for Device")) Termometrs[deviceid].IsError = true;
+                    else
+                    {
+                        Termometrs[deviceid].Address = reads.Split('\n')[3].Split(':')[1].Trim();
+                        Termometrs[deviceid].CurrentResolution = (DallasResolution)byte.Parse(reads.Split('\n')[4].Split(':')[1].Trim());
+                    }
                 }
+                if(isneed) TermometrEdit?.Invoke(this, new EventArgs());
             }
         }
 
@@ -202,6 +225,7 @@ namespace DallasMicrofController
             {
                 _serialPort.PortName = Setting.COMPorts;
                 _serialPort.Open();
+                SendResolution();
                 SendReadInformation();
                 Read();
             }

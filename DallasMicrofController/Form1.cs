@@ -21,16 +21,23 @@ namespace DallasMicrofController
         Thread th;
         bool IsClose = false;
         bool isThreadRun = false;
+        Parser args;
         public Form1()
         {
-            InitializeComponent();
+            InitializeComponent();           
+        }
+        public Form1(string[] args) : this()
+        {
+            this.args = new Parser(args);
+            Parser.Global = this.args;
+
             dallas.Load();
             srv.Load();
             srv.ds = dallas;
 
             if (srv.Setting.Name != "") Text = "DallasMicrofController - " + srv.Setting.Name;
 
-            th = new Thread(() => 
+            th = new Thread(() =>
             {
                 isThreadRun = true;
                 while (!IsClose)
@@ -41,7 +48,33 @@ namespace DallasMicrofController
                         //Thread.Sleep(1000);
                     }
                 }
-            });          
+            });
+
+            dallas.ConnectError += CE;
+            dallas.TermometrEdit += TE;
+        }
+
+        void CE(object sender, EventArgs e)
+        {
+            dallas = new Dallas();
+            dallas.Load();
+            dallas.ConnectError += CE;
+            dallas.TermometrEdit += TE;
+            StopConnect();
+        }
+
+        void TE(object sender, EventArgs e)
+        {
+            Invoke(new Action(() => {
+                Size = MinimumSize;
+                flowLayoutPanel1.Controls.Clear();
+                for (int i = 0; i < dallas.Termometrs.Length; i++)
+                {
+                    var y = new Temperature() { Temerature = "----" };
+                    flowLayoutPanel1.Controls.Add(y);
+                    if(i != 0)Size += new Size(0, y.Height);
+                }                
+            }));
         }
 
         private void Form1_Load(object sender, EventArgs e)
@@ -81,31 +114,31 @@ namespace DallasMicrofController
         {
             if (!dallas.IsConnect) {
                 dallas.Connect();
-                timer1.Start();
                 timer2.Start();
                 if (!isThreadRun) th.Start();
                 установитьСоединениеToolStripMenuItem.Text = "Разорвать соединение";
-
-                flowLayoutPanel1.Controls.Clear();
-                for (int i = 0; i < dallas.Termometrs.Length; i++)
-                {
-                    flowLayoutPanel1.Controls.Add(new Temperature() { Temerature = "----" });
-                }               
+                flowLayoutPanel1.Controls.Add(new Temperature() { Temerature = "----" });
+                timer1.Start();
             }
             else
             {
-                dallas.Close();
-                timer1.Stop();
-                timer2.Stop();
-                установитьСоединениеToolStripMenuItem.Text = "Установить соединение";
+                StopConnect();
             }
+        }
+
+        void StopConnect()
+        {
+            if (dallas.IsConnect) dallas.Close();
+            timer1.Stop();
+            timer2.Stop();
+            установитьСоединениеToolStripMenuItem.Text = "Установить соединение";
         }
 
         private void timer1_Tick(object sender, EventArgs e)
         {
             //Console.WriteLine(dallas.Temperature);
             //label2.Text = dallas.Termometrs[0].Temperature.ToString() + "°C";
-            for (int i = 0; i < dallas.Termometrs.Length; i++)
+            for (int i = 0; i < Math.Min(flowLayoutPanel1.Controls.Count, dallas.Termometrs.Length); i++)
             {
                 (flowLayoutPanel1.Controls[i] as Temperature).Temerature = dallas.Termometrs[i].Temperature.ToString() + "°C";
             }
@@ -137,7 +170,8 @@ namespace DallasMicrofController
                     tmp += "-------------------" + Environment.NewLine;
                     tmp += "Опрашиваемый датчик: "+ (i+1) + Environment.NewLine;
                     tmp += "Ошибки датчика: " + (dallas.Termometrs[i].IsError ? "есть" : "нет") + Environment.NewLine;
-                    tmp += "Адрес датчика: " + dallas.Termometrs[i].Address + Environment.NewLine;
+                    tmp += "Фантомное питание: " + (dallas.Termometrs[i].ParasitePowers ? "включено" : "выключено") + Environment.NewLine;
+                    tmp += "Серийный номер датчика: " + dallas.Termometrs[i].Address + Environment.NewLine;
                     tmp += "Установленное разрешение: " + (byte)dallas.Termometrs[i].CurrentResolution + " бит" + Environment.NewLine;
                     tmp += "-------------------" + Environment.NewLine;
                 }               
@@ -156,9 +190,10 @@ namespace DallasMicrofController
         }
 
         private void toolStripTextBox1_TextChanged(object sender, EventArgs e)
-        {           
+        {
+            bool h;
             srv.Setting.SetName(toolStripTextBox1.Text);
-            Text = "DallasMicrofController - " + srv.Setting.Name;
+            Text = "DallasMicrofController - " + srv.Setting.Name + " - " + Parser.Global.FindParamsAndArgs("-p", out h);
             srv.Setting.Save();
         }
     }

@@ -81,7 +81,7 @@ namespace DallasMicrofController
                         if (Request.Contains("rd"))
                         {
                             var nd = int.Parse(Request.Substring(2));
-                            SendClient(stream, "temperature-" + ds.Termometrs[nd].Temperature);
+                            SendClient(stream, "temperature:" + (ds.Termometrs.Length > 0 ? ds.Termometrs[nd].Temperature : 0f));
                         }
                         else if (Request.Contains("sr"))
                         {
@@ -108,6 +108,7 @@ namespace DallasMicrofController
                             for (byte i = 0; i < ds.DevicesOfLines; i++)
                             {
                                 tmp += ds.Termometrs[i].IsError.ToString() + "\n";
+                                tmp += ds.Termometrs[i].ParasitePowers.ToString() + "\n";
                                 tmp += ds.Termometrs[i].Address + "\n";
                                 tmp += ((byte)ds.Termometrs[i].CurrentResolution).ToString() + "\n";
                             }
