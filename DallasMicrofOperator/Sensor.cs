@@ -48,6 +48,8 @@ namespace DallasMicrofOperator
                 br = Brushes.Red;
             else if (temper != "" && temper != "----" && float.Parse(temper) >= set.Yellow)
                 br = Brushes.Yellow;
+            else if (temper != "" && temper != "----" && float.Parse(temper) < 0)
+                br = Brushes.MediumBlue;
             else if (temper == "" || temper == "----")
                 br = Brushes.Blue;
             g.Clear(Color.Black);

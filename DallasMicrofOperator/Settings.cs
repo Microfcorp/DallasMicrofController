@@ -99,14 +99,17 @@ namespace DallasMicrofOperator
                 comboBox6.Items.Add(i);
             }
             if(comboBox6.Items.Count > int.Parse(set.TermometrID[comboBox1.SelectedIndex]))
-                comboBox6.SelectedIndex = int.Parse(set.TermometrID[comboBox1.SelectedIndex]);
+                comboBox6.SelectAtIndex(int.Parse(set.TermometrID[comboBox1.SelectedIndex]));
         }
 
         private void comboBox2_SelectedIndexChanged(object sender, EventArgs e)
         {
             textBox2.Text = Network.GetServerName(set.RemoteServers[comboBox2.SelectedIndex]);
-            if(textBox2.Text != "")
-            comboBox4.SelectedIndex = byte.Parse(Network.GetServerInfo(set.RemoteServers[comboBox2.SelectedIndex]).Split('\n')[4]) - 9;
+            if (textBox2.Text != "")
+            {
+                var nn = Network.GetServerInfo(set.RemoteServers[comboBox2.SelectedIndex]);
+                comboBox4.SelectAtIndex(byte.Parse(nn.Split('\n').GetOfIndex(5, "9")) - 9);
+            }
         }
 
         private void comboBox4_SelectedIndexChanged(object sender, EventArgs e)
@@ -133,13 +136,17 @@ namespace DallasMicrofOperator
             if (rm[0] == "True")
             {
                 tmp += "Количество датчиков на линии: " + rm[1] + Environment.NewLine;
-                for (byte i = 0, u = 2; i < byte.Parse(rm[1]); i++, u += 3)
+                for (byte i = 0, u = 2; i < byte.Parse(rm[1]); i++, u += 4)
                 {
                     tmp += "-------------------" + Environment.NewLine;
                     tmp += "Опрашиваемый датчик: " + (i+1) + Environment.NewLine;
                     tmp += "Ошибки датчика: " + (rm[u] == "True" ? "есть" : "нет") + Environment.NewLine;
-                    tmp += "Адрес датчика: " + rm[u+1] + Environment.NewLine;
-                    tmp += "Установленное разрешение: " + rm[u+2] + " бит" + Environment.NewLine;
+                    if (rm[u] != "True")
+                    {
+                        tmp += "Фантомное питание: " + (rm[u + 1] == "True" ? "включено" : "выключено") + Environment.NewLine;
+                        tmp += "Серийный номер датчика: " + rm[u + 2] + Environment.NewLine;
+                        tmp += "Установленное разрешение: " + rm[u + 3] + " бит" + Environment.NewLine;
+                    }
                     tmp += "-------------------" + Environment.NewLine;
                 }              
             }

@@ -37,7 +37,7 @@ namespace DallasMicrofOperator
         }
         public static string GetServerTemepature(string ip, string tid)
         {
-            return SendRequest(ip, "rd"+ tid).Split('-').LastOrDefault();
+            return SendRequest(ip, "rd"+ tid).Split(':').LastOrDefault();
         }
         public static string GetServerInfo(string ip)
         {

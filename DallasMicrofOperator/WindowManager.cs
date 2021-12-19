@@ -74,5 +74,24 @@ namespace DallasMicrofOperator
             }
             Element.Region = new Region(gr);
         }
+        /// <summary>
+        /// Устанавливает значение по индексу
+        /// </summary>
+        /// <param name="Element">Элемент</param>
+        public static void SelectAtIndex(this ComboBox Element, int index)
+        {
+            if(index >= 0 && index < Element.Items.Count)
+                Element.SelectedIndex = index;
+        }
+        /// <summary>
+        /// Устанавливает значение по индексу
+        /// </summary>
+        /// <param name="Element">Элемент</param>
+        public static T GetOfIndex<T>(this T[] Element, int index, T defaul = default(T))
+        {
+            if (index >= 0 && index < Element.Length)
+                return Element[index];
+            return defaul;
+        }
     }
 }
