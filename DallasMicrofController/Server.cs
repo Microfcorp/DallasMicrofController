@@ -10,11 +10,32 @@ namespace DallasMicrofController
 {
     class Server : IDisposable
     {
-        public bool IsClose = false;
-        Thread th;
-        public void Start()
+        public bool IsClose = true;
+
+        /// <summary>
+        /// Работает ли сервер
+        /// </summary>
+        public bool IsRun
         {
+            get => !IsClose;
+        }
+
+        /// <summary>
+        /// При изменении статуса сервера
+        /// </summary>
+        public event EventHandler<ServerStatusEventArg> StatusChange;
+
+        Thread th;
+        Thread UDPThread;
+        public void Start()
+        {          
             Start(3322);
+        }
+
+        public void StartUDP()
+        {
+            UDPThread = new Thread(new ThreadStart(ReceiveUDPMessage));
+            UDPThread.Start();
         }
 
         public ServerSetting Setting
@@ -39,16 +60,19 @@ namespace DallasMicrofController
         }
 
         TcpListener Listener; // Объект, принимающий TCP-клиентов
+        UdpClient receiver;
 
         // Запуск сервера
         public void Start(int Port)
-        {            
+        {
+            IsClose = false;
             // Создаем "слушателя" для указанного порта
             Listener = new TcpListener(IPAddress.Any, Port);
             Listener.Start(); // Запускаем его
            
             th = new Thread(() =>
             {
+                StatusChange?.Invoke(this, new ServerStatusEventArg(ServerStatus.ServerStart));
                 // В бесконечном цикле
                 while (!IsClose)
                 {
@@ -104,6 +128,8 @@ namespace DallasMicrofController
                         else if (Request == "rm")
                         {
                             var tmp = ds.IsConnect.ToString() + "\n";
+                            tmp += ds.SN.ToString() + "\n";
+                            tmp += ds.DateProduct.ToString() + "\n";
                             tmp += ds.DevicesOfLines.ToString() + "\n";
                             for (byte i = 0; i < ds.DevicesOfLines; i++)
                             {
@@ -119,7 +145,7 @@ namespace DallasMicrofController
                         {
                             SendClient(stream, "ServerDallasMicrof-" + Setting.Name);
                         }
-
+                        StatusChange?.Invoke(this, new ServerStatusEventArg(ServerStatus.ServerReadData));
                         // Закроем соединение
                         Client.Close();
                     });
@@ -129,6 +155,8 @@ namespace DallasMicrofController
             });
             th.IsBackground = true;
             th.Start();
+
+            StartUDP();
         }
 
         static void SendClient(NetworkStream client, string text)
@@ -139,6 +167,54 @@ namespace DallasMicrofController
             client.Write(Buffer1, 0, Buffer1.Length);
         }
 
+        private void ReceiveUDPMessage()
+        {
+            receiver = new UdpClient(8978); // UdpClient для получения данных
+            receiver.JoinMulticastGroup(IPAddress.Parse("235.9.1.34"), 20);
+            IPEndPoint remoteIp = null;
+            //string localAddress = LocalIPAddress();
+            try
+            {
+                while (!IsClose)
+                {
+                    byte[] data = receiver.Receive(ref remoteIp); // получаем данные
+
+                    if(data.SequenceEqual(new byte[] { 0xac, 0xdc, 0xff }))
+                    {
+                        SendUDPMessage(GetAllCurrentIP()+"|", remoteIp.Port);
+                        Console.WriteLine("Discover");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+            finally
+            {
+                receiver.Close();
+            }
+        }
+
+        private static void SendUDPMessage(string Message, int port)
+        {
+            UdpClient sender = new UdpClient(); // создаем UdpClient для отправки
+            IPEndPoint endPoint = new IPEndPoint(IPAddress.Parse("235.9.1.34"), port);
+            try
+            {
+                byte[] data = Encoding.UTF8.GetBytes(Message);
+                sender.Send(data, data.Length, endPoint); // отправка
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+            finally
+            {
+                sender.Close();
+            }
+        }
+
         public Server()
         {
         }
@@ -146,22 +222,40 @@ namespace DallasMicrofController
         // Остановка сервера
         ~Server()
         {
-            IsClose = true;
-            // Если "слушатель" был создан
-            if (Listener != null)
-            {
-                // Остановим его
-                Listener.Stop();
-            }
+            Dispose();
         }
         public void Dispose()
         {
             IsClose = true;
             try
             {
-                //th.Abort();
+                if(th != null)
+                    th.Abort();
+                if (UDPThread != null)
+                    UDPThread.Abort();
+                // Если "слушатель" был создан
+                if (Listener != null)
+                    Listener.Stop();
+
+                if (receiver != null)
+                    receiver.Close();
+
+                StatusChange?.Invoke(this, new ServerStatusEventArg(ServerStatus.ServerStop));
             }
             catch (Exception ex) { }
+        }
+
+        public static string[] GetCurrentIP()
+        {
+            // Получение имени компьютера.
+            string host = Dns.GetHostName();
+            // Получение ip-адреса.
+            return Dns.GetHostAddresses(host).Where(tmp => tmp.AddressFamily == AddressFamily.InterNetwork).Select(t => t.ToString()).ToArray();
+        }
+
+        public static string GetAllCurrentIP()
+        {
+            return string.Join("\n", GetCurrentIP());
         }
     }
 }

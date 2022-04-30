@@ -129,6 +129,44 @@ namespace DallasMicrofController
             }
         }
 
+        public string SN
+        {
+            get;
+            private set;
+        }
+        public string DateProduct
+        {
+            get
+            {
+                if (SN == null) return "00.00.00";
+                var t = SN.Substring(9);
+                var m = t.Substring(0, 2);
+                var d = t.Substring(2, 2);
+                var y = t.Substring(4, 2);
+                return d + "." + m + "." + y;
+            }
+        }
+        public bool IsMichomeModule
+        {
+            get;
+            private set;
+        }
+        public bool IsCorectSN
+        {
+            get;
+            private set;
+        }
+        public bool IsCorectAuth
+        {
+            get;
+            private set;
+        }
+        public string Key
+        {
+            get;
+            set;
+        }
+
         public event EventHandler ConnectError;
         public event EventHandler TermometrEdit;
 
@@ -155,7 +193,7 @@ namespace DallasMicrofController
             try
             {
                 if (IsConnect)
-                    _serialPort.WriteLine(text);
+                    _serialPort.Write(text);
             }
             catch {
                 ConnectError?.Invoke(this, new EventArgs());
@@ -168,7 +206,7 @@ namespace DallasMicrofController
         }
         public void SendResolution()
         {
-            WriteCOM("sr"+(byte)Setting.Resolution);
+            WriteCOM("sr"+(byte)Setting.Resolution+";");
             System.Threading.Thread.Sleep(500);
             SendReadInformation();
         }
@@ -180,6 +218,22 @@ namespace DallasMicrofController
         {
             WriteCOM("ping;");
         }
+        public void SendIdentificator_AND_Read()
+        {
+            WriteCOM("ia;");
+            System.Threading.Thread.Sleep(50);
+            Read();
+        }
+        public void SendAuth()
+        {
+            WriteCOM("auKT"+Key+";");
+            System.Threading.Thread.Sleep(300);
+        }
+        public void CheckConnect_AND_Read()
+        {
+            SendReadPing();
+            Read();
+        }
 
         public void Read()
         {
@@ -187,9 +241,11 @@ namespace DallasMicrofController
             string reads = "";
             try
             {
-                reads = _serialPort.ReadTo(";").Replace("\r", "").Trim();
+                if(_serialPort.BytesToRead > 0)
+                    reads = _serialPort.ReadTo(";").Replace("\r", "");
             }
             catch (Exception ex) { return; }
+            reads = reads.Trim();
             if (reads.Contains("Requesting temperatures...") && reads.Length < 55)
             {
                 var deviceid = byte.Parse(reads.Split('\n')[1].Split(' ')[1]);
@@ -197,38 +253,89 @@ namespace DallasMicrofController
             }
             else if (reads.Contains("Informations:"))
             {
-                DevicesOfLines = byte.Parse(reads.Split('\n')[1].Split(' ')[1].Trim());
-                var isneed = DevicesOfLines != Termometrs.Length;
-                var list = Termometrs.ToList();
-                list.RemoveRange(DevicesOfLines, list.Count - DevicesOfLines);
-                Termometrs = list.ToArray();
-
-                for (int i = 0; i < DevicesOfLines; i++)
+                try
                 {
-                    var deviceid = byte.Parse(reads.Split('\n')[2].Split(' ')[4].Trim(':'));
-                    Termometrs[deviceid].ParasitePowers = reads.Split('\n')[2].Split(':')[1].Trim() == "ON";
+                    DevicesOfLines = byte.Parse(reads.Split('\n')[1].Split(' ')[1].Trim());
+                    var isneed = DevicesOfLines != Termometrs.Length;
+                    var list = Termometrs.ToList();
+                    list.RemoveRange(DevicesOfLines, list.Count - DevicesOfLines);
+                    Termometrs = list.ToArray();
 
-                    if (reads.Contains("Unable to find address for Device")) Termometrs[deviceid].IsError = true;
-                    else
+                    for (int i = 0; i < DevicesOfLines; i++)
                     {
-                        Termometrs[deviceid].Address = reads.Split('\n')[3].Split(':')[1].Trim();
-                        Termometrs[deviceid].CurrentResolution = (DallasResolution)byte.Parse(reads.Split('\n')[4].Split(':')[1].Trim());
+                        var deviceid = byte.Parse(reads.Split('\n')[2].Split(' ')[4].Trim(':'));
+                        Termometrs[deviceid].ParasitePowers = reads.Split('\n')[2].Split(':')[1].Trim() == "ON";
+
+                        if (reads.Contains("Unable to find address for Device")) Termometrs[deviceid].IsError = true;
+                        else
+                        {
+                            Termometrs[deviceid].Address = reads.Split('\n')[3].Split(':')[1].Trim();
+                            Termometrs[deviceid].CurrentResolution = (DallasResolution)byte.Parse(reads.Split('\n')[4].Split(':')[1].Trim());
+                        }
                     }
+                    if (isneed) TermometrEdit?.Invoke(this, new EventArgs());
                 }
-                if(isneed) TermometrEdit?.Invoke(this, new EventArgs());
+                catch { }
+            }
+            else if (reads.Contains("Identificator:"))
+            {
+                var d = reads.Split('\n')[1].Trim();
+                var db = StringToByteArray(d);
+                if (db.Take(4).SequenceEqual(new byte[] { 0xfc, 0xff, 0xca, 0xfa }))
+                    IsCorectSN = true;
+                //var _key = db.Skip(4).Take(8).ToArray();
+                var _sn = db.Skip(4).Reverse().Skip(1).Reverse().ToArray();
+                SN = Encoding.UTF8.GetString(_sn);
+            }
+            else if (reads.Contains("PING OK"))
+            {
+                IsMichomeModule = true;
+            }
+            else if (reads.Contains("DisAuthorized"))
+            {
+                SendReadPing();
+            }
+            else if (reads.Contains("Auth OK"))
+            {
+                IsCorectAuth = true;
+                Console.WriteLine("Auth OK");
             }
         }
 
-        public void Connect()
+        public static byte[] StringToByteArray(String hex)
         {
-            if (!_serialPort.IsOpen)
+            int NumberChars = hex.Length;
+            byte[] bytes = new byte[NumberChars / 2];
+            for (int i = 0; i < NumberChars; i += 2)
+                bytes[i / 2] = Convert.ToByte(hex.Substring(i, 2), 16);
+            return bytes;
+        }
+
+        public bool IsExistPort(string Port)
+        {
+            return SerialPort.GetPortNames().Where(t => t == Port).Any();
+        }
+
+        public bool Connect()
+        {
+            if (!_serialPort.IsOpen && IsExistPort(Setting.COMPorts))
             {
                 _serialPort.PortName = Setting.COMPorts;
                 _serialPort.Open();
+                CheckConnect_AND_Read(); //Если это плата наша 
+                //System.Threading.Thread.Sleep(200);
+                //for (int i = 0; i < 20 || !IsCorectAuth; i++)
+                //{
+                    SendAuth(); //Авторизуемся
+                //}
+                  
                 SendResolution();
                 SendReadInformation();
                 Read();
+                SendIdentificator_AND_Read(); //Читаем серийник
+                return true;
             }
+            return false;
         }
         public void Close()
         {

@@ -45,13 +45,34 @@ namespace DallasMicrofController
                     if (dallas.IsConnect)
                     {
                         dallas.Read();
-                        //Thread.Sleep(1000);
+                        Thread.Sleep(100);
                     }
                 }
             });
 
             dallas.ConnectError += CE;
             dallas.TermometrEdit += TE;
+            dallas.Key = "ThisCntr";
+
+            srv.StatusChange += (o, e) => 
+            {
+                try
+                {
+                    if (e.Status == ServerStatus.ServerStart)
+                        Status = "Сервер запущен";
+                    else if (e.Status == ServerStatus.ServerStop)
+                        Status = "Сервер остановлен";
+                    else if (e.Status == ServerStatus.ServerError)
+                        Status = "Ошибка сервера";
+                }
+                catch { Console.WriteLine("StatusChange - Error"); }
+            };
+        }
+
+        private string Status
+        {
+            get => label2.Text;
+            set => Invoke(new Action(() => label2.Text = value));
         }
 
         void CE(object sender, EventArgs e)
@@ -99,7 +120,17 @@ namespace DallasMicrofController
             else if (dallas.Setting.Resolution == DallasResolution.bit10) битToolStripMenuItem1.Checked = true;
             else if (dallas.Setting.Resolution == DallasResolution.bit11) битToolStripMenuItem2.Checked = true;
 
+            запускатьАвтоматическиToolStripMenuItem.Checked = srv.Setting.IsAutoStart;
+
             toolStripTextBox1.Text = srv.Setting.Name;
+
+            toolTip1.SetToolTip(label4, Server.GetAllCurrentIP());
+            label4.Text = Server.GetCurrentIP()[0];
+
+            if (srv.Setting.IsAutoStart)
+            {
+                установитьСоединениеToolStripMenuItem_Click(null, null);
+            }
         }
 
         private void SetResol(object sender, EventArgs e)
@@ -113,12 +144,21 @@ namespace DallasMicrofController
         private void установитьСоединениеToolStripMenuItem_Click(object sender, EventArgs e)
         {
             if (!dallas.IsConnect) {
-                dallas.Connect();
-                timer2.Start();
-                if (!isThreadRun) th.Start();
-                установитьСоединениеToolStripMenuItem.Text = "Разорвать соединение";
-                flowLayoutPanel1.Controls.Add(new Temperature() { Temerature = "----" });
-                timer1.Start();
+                if (dallas.Connect())
+                {
+                    timer2.Start();
+                    if (!isThreadRun) th.Start();
+                    установитьСоединениеToolStripMenuItem.Text = "Разорвать соединение";
+                    flowLayoutPanel1.Controls.Add(new Temperature() { Temerature = "----" });
+                    timer1.Start();
+                    if (srv.Setting.IsAutoStart)
+                    {
+                        srv.Start();
+                        стартToolStripMenuItem.Text = "Стоп";
+                    }
+                }
+                else
+                    MessageBox.Show("Ошибка соединения");
             }
             else
             {
@@ -160,8 +200,10 @@ namespace DallasMicrofController
 
         private void информацияОТермометреToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            string tmp = "Информация о термометре: "+Environment.NewLine;
+            string tmp = "Информация о контроллере: "+Environment.NewLine;
             tmp += "Соединение с платой: "+(dallas.IsConnect ? "установленно" : "потеряно")+Environment.NewLine;
+            tmp += "Серийный номер контроллера: " + dallas.SN + Environment.NewLine;
+            tmp += "Дата производства контроллера: " + dallas.DateProduct + Environment.NewLine;
             if (dallas.IsConnect)
             {
                 tmp += "Количество датчиков на линии: " + dallas.DevicesOfLines + Environment.NewLine;
@@ -181,12 +223,29 @@ namespace DallasMicrofController
 
         private void timer2_Tick(object sender, EventArgs e)
         {
+            dallas.CheckConnect_AND_Read();
             dallas.SendReadInformation();
         }
 
         private void стартToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            srv.Start();
+            if (!srv.IsRun)
+            {
+                if (dallas.IsCorectSN)
+                {
+                    srv.Start();
+                    стартToolStripMenuItem.Text = "Стоп";
+                }
+                else
+                {
+                    MessageBox.Show("Запустить сервер можно только с верифицированным контроллером");
+                }
+            }
+            else
+            { 
+                srv.Dispose();
+                стартToolStripMenuItem.Text = "Старт";
+            }
         }
 
         private void toolStripTextBox1_TextChanged(object sender, EventArgs e)
@@ -195,6 +254,34 @@ namespace DallasMicrofController
             srv.Setting.SetName(toolStripTextBox1.Text);
             Text = "DallasMicrofController - " + srv.Setting.Name + " - " + Parser.Global.FindParamsAndArgs("-p", out h);
             srv.Setting.Save();
+        }
+
+        private void добавитьВАвтозапускToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            AutoStart.SetAutorunValue(true);
+        }
+
+        private void удалитьИзАвтозапускаToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            AutoStart.SetAutorunValue(false);
+        }
+
+        private void запускатьАвтоматическиToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            запускатьАвтоматическиToolStripMenuItem.Checked = !запускатьАвтоматическиToolStripMenuItem.Checked;
+            srv.Setting.IsAutoStart = !srv.Setting.IsAutoStart;
+            srv.Setting.Save();
+        }
+
+        private void Form1_Resize(object sender, EventArgs e)
+        {
+            ShowInTaskbar = !(this.WindowState == FormWindowState.Minimized);
+            notifyIcon1.Visible = this.WindowState == FormWindowState.Minimized;
+        }
+
+        private void notifyIcon1_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+            this.WindowState = FormWindowState.Normal;
         }
     }
 }

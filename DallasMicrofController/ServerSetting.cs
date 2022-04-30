@@ -14,9 +14,16 @@ namespace DallasMicrofController
         public ServerSetting(string Name)
         {
             this.Name = Name;
+            IsAutoStart = false;
         }
 
         public string Name
+        {
+            get;
+            set;
+        }
+
+        public bool IsAutoStart
         {
             get;
             set;
