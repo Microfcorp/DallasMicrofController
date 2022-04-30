@@ -5,6 +5,7 @@ using System.Data;
 using System.Drawing;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace DallasMicrofOperator
@@ -12,12 +13,10 @@ namespace DallasMicrofOperator
     public partial class Settings : Form
     {
         Settingam set = Settingam.Load();
+        Thread th;
         public Settings()
         {
             InitializeComponent();
-            UpdateServers();
-            UpdateAlarms();
-            UpdateColor();
         }
 
         void UpdateServers()
@@ -31,12 +30,14 @@ namespace DallasMicrofOperator
                 comboBox1.Items.Add(n == "" ? item : n);
                 comboBox2.Items.Add(n == "" ? item : n);
                 comboBox5.Items.Add(n == "" ? item : n);
+                comboBox8.Items.Add(n == "" ? item : n);
                 label6.Visible = n == "";
             }
             if (comboBox1.Items.Count > 0)
             {
                 comboBox1.SelectedIndex = 0;
                 comboBox2.SelectedIndex = 0;
+                comboBox8.SelectedIndex = 0;
             }
         }
 
@@ -58,6 +59,11 @@ namespace DallasMicrofOperator
             checkBox2.Checked = set.IsLog;
         }
 
+        void UpdateVisibler()
+        {
+
+        }
+
         private void button2_Click(object sender, EventArgs e)
         {
             var c = set.RemoteServers.ToList();
@@ -66,6 +72,9 @@ namespace DallasMicrofOperator
             var a = set.TermometrID.ToList();
             a.Add("0");
             set.TermometrID = a.ToArray();
+            var o = set.SensorSettings.ToList();
+            o.Add(new SensorSettings(c.Count-1));
+            set.SensorSettings = o.ToArray();
             set.Save();
             UpdateServers();
         }
@@ -84,21 +93,21 @@ namespace DallasMicrofOperator
 
         private void button3_Click(object sender, EventArgs e)
         {
-            set.RemoteServers[comboBox1.SelectedIndex] = textBox1.Text;
+            set.RemoteServers[comboBox1.SelectedIndex] = comboBox7.Text;
             set.Save();
             UpdateServers();
         }
 
         private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
-            textBox1.Text = set.RemoteServers[comboBox1.SelectedIndex];
+            comboBox7.Text = set.RemoteServers[comboBox1.SelectedIndex];
 
             comboBox6.Items.Clear();
             for (int i = 0; i < Network.GetServerNemberTermometrs(set.RemoteServers[comboBox1.SelectedIndex]); i++)
             {
                 comboBox6.Items.Add(i);
             }
-            if(comboBox6.Items.Count > int.Parse(set.TermometrID[comboBox1.SelectedIndex]))
+            if (comboBox6.Items.Count > int.Parse(set.TermometrID[comboBox1.SelectedIndex]))
                 comboBox6.SelectAtIndex(int.Parse(set.TermometrID[comboBox1.SelectedIndex]));
         }
 
@@ -108,7 +117,7 @@ namespace DallasMicrofOperator
             if (textBox2.Text != "")
             {
                 var nn = Network.GetServerInfo(set.RemoteServers[comboBox2.SelectedIndex]);
-                comboBox4.SelectAtIndex(byte.Parse(nn.Split('\n').GetOfIndex(5, "9")) - 9);
+                comboBox4.SelectAtIndex(byte.Parse(nn.Split('\n').GetOfIndex(7, "9")) - 9);
             }
         }
 
@@ -126,20 +135,22 @@ namespace DallasMicrofOperator
         private void button5_Click(object sender, EventArgs e)
         {
             var rm = Network.GetServerInfo(set.RemoteServers[comboBox2.SelectedIndex]).Split('\n');
-            if(rm == null)
+            if (rm == null)
             {
                 MessageBox.Show("Неизвестная ошибка");
                 return;
             }
             string tmp = "Информация о термометре: " + Environment.NewLine;
             tmp += "Соединение с платой: " + (rm[0] == "True" ? "установленно" : "потеряно") + Environment.NewLine;
+            tmp += "Серийный номер контроллера: " + rm[1] + Environment.NewLine;
+            tmp += "Дата производства контроллера: " + rm[2] + Environment.NewLine;
             if (rm[0] == "True")
             {
-                tmp += "Количество датчиков на линии: " + rm[1] + Environment.NewLine;
-                for (byte i = 0, u = 2; i < byte.Parse(rm[1]); i++, u += 4)
+                tmp += "Количество датчиков на линии: " + rm[3] + Environment.NewLine;
+                for (byte i = 0, u = 4; i < byte.Parse(rm[3]); i++, u += 4)
                 {
                     tmp += "-------------------" + Environment.NewLine;
-                    tmp += "Опрашиваемый датчик: " + (i+1) + Environment.NewLine;
+                    tmp += "Опрашиваемый датчик: " + (i + 1) + Environment.NewLine;
                     tmp += "Ошибки датчика: " + (rm[u] == "True" ? "есть" : "нет") + Environment.NewLine;
                     if (rm[u] != "True")
                     {
@@ -148,7 +159,7 @@ namespace DallasMicrofOperator
                         tmp += "Установленное разрешение: " + rm[u + 3] + " бит" + Environment.NewLine;
                     }
                     tmp += "-------------------" + Environment.NewLine;
-                }              
+                }
             }
             MessageBox.Show(tmp);
         }
@@ -198,7 +209,7 @@ namespace DallasMicrofOperator
         {
             OpenFileDialog opg = new OpenFileDialog();
             opg.Filter = "WAV File|*.wav";
-            if(opg.ShowDialog() == DialogResult.OK)
+            if (opg.ShowDialog() == DialogResult.OK)
             {
                 textBox3.Text = opg.FileName;
             }
@@ -218,7 +229,7 @@ namespace DallasMicrofOperator
 
         private void comboBox6_SelectedIndexChanged(object sender, EventArgs e)
         {
-            
+
         }
 
         private void button9_Click(object sender, EventArgs e)
@@ -232,6 +243,76 @@ namespace DallasMicrofOperator
         {
             set.IsLog = checkBox2.Checked;
             set.Save();
+        }
+
+        private void Settings_Load(object sender, EventArgs e)
+        {
+            UpdateServers();
+            UpdateAlarms();
+            UpdateColor();
+            UpdateVisibler();
+
+            th = new Thread(() =>
+            {
+                Network.SearchServers((o, a) =>
+                {
+                    Invoke(new Action(() =>
+                    {
+                        foreach (var p in (o as string).Split('\n'))
+                            if (!comboBox7.Items.Contains(p))
+                                comboBox7.Items.Add(p);
+                    }));
+                });
+            });
+            //System.Timers.Timer t = new System.Timers.Timer();
+            //t.Elapsed += (r, y) => { t.Stop(); th.Abort(); };
+            //t.Interval = 2000;
+            //t.Start();
+            Disposed += (q, w) => th.Abort();
+            th.Start();
+        }
+
+        private void Settings_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            th.Abort();
+        }
+
+        private void button10_Click(object sender, EventArgs e)
+        {
+            var c = set.SensorSettings.Where(tmp => tmp.IDDM == comboBox8.SelectedIndex).FirstOrDefault();
+            if (c == default(SensorSettings)) return;
+            int ind = set.SensorSettings.ToList().IndexOf(c);
+            c.TimeUpdate = (uint)numericUpDown5.Value;
+            c.UseAutoResize = checkBox3.Checked;
+            c.UseSystemFont = checkBox4.Checked;
+            c.BackgroungColor = selectColor;
+            c.KFontSize = numericUpDown6.Value;
+            set.SensorSettings[ind] = c;
+            set.Save();
+        }
+
+        private void comboBox8_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            var c = set.SensorSettings.Where(tmp => tmp.IDDM == comboBox8.SelectedIndex).FirstOrDefault();
+            if (c == default(SensorSettings)) return;
+            numericUpDown5.Value = c.TimeUpdate;
+            checkBox3.Checked = c.UseAutoResize;
+            checkBox4.Checked = c.UseSystemFont;
+            selectColor = c.BackgroungColor;
+            numericUpDown6.Value = c.KFontSize;
+            panel1.CreateGraphics().Clear(selectColor);
+        }
+
+        Color selectColor;
+
+        private void button11_Click(object sender, EventArgs e)
+        {
+            ColorDialog cd = new ColorDialog();
+            if(cd.ShowDialog() == DialogResult.OK)
+            {
+                panel1.CreateGraphics().Clear(cd.Color);
+                selectColor = cd.Color;
+            }
         }
     }
 }

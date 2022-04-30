@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -17,6 +18,7 @@ namespace DallasMicrofOperator
             RemoteServers = new string[0];
             TermometrID = new string[0];
             Alarms = new Alarm[0];
+            SensorSettings = new SensorSettings[0];
             Red = 50;
             Yellow = 30;
             IsLog = false;
@@ -33,6 +35,11 @@ namespace DallasMicrofOperator
             set;
         }
         public Alarm[] Alarms
+        {
+            get;
+            set;
+        }
+        public SensorSettings[] SensorSettings
         {
             get;
             set;
@@ -89,6 +96,30 @@ namespace DallasMicrofOperator
             Maximum = maximum;
             Enable = enable;
             File = file;
+        }
+    }
+
+    [Serializable]
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public class SensorSettings
+    {
+        public int IDDM;
+        public uint TimeUpdate;
+        public decimal KFontSize;
+        public bool UseAutoResize;
+        public bool UseSystemFont;
+        public Color BackgroungColor;
+
+        public SensorSettings()
+        {
+            TimeUpdate = 3;
+            BackgroungColor = Color.LightGray;
+            KFontSize = 1;
+        }
+
+        public SensorSettings(int iDDM) : this()
+        {
+            IDDM = iDDM;
         }
     }
 }

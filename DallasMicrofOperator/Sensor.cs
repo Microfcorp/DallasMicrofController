@@ -22,15 +22,56 @@ namespace DallasMicrofOperator
         string temper = "----";
 
         LogFile data = new LogFile("DataLog.csv");
+
+        bool IsDefaultFonts = false;
+
         public Sensor()
         {
             InitializeComponent();
-            AddFont("7 Segment.ttf");           
-            AddFont("7LED.ttf");                      
+            try
+            {
+                AddFont("7 Segment.ttf");
+                AddFont("7LED.ttf");
+            }
+            catch { IsDefaultFonts = true; }
         }
+        Color BackColors = Color.Black;
+        bool AutoResize;
+        decimal kF;
         public Sensor(uint Selected) : this()
         {
             id = Selected;
+
+            try
+            {
+                var c = Settingam.Load().SensorSettings.Where(tmp => tmp.IDDM == Selected).FirstOrDefault();
+                if (c != default(SensorSettings))
+                {
+                    timer1.Interval = (int)c.TimeUpdate * 1000;
+                    if (c.UseSystemFont) IsDefaultFonts = true; //наоборот незя
+                    BackColors = c.BackgroungColor;
+                    AutoResize = c.UseAutoResize;
+                    kF = c.KFontSize;
+                    if (!AutoResize)
+                    {
+                        Label lb = new Label();
+                        lb.Name = "ShefTTT";
+                        lb.AutoSize = true;
+                        lb.Location = new Point(0, 0);
+                        lb.BackColor = BackColors;
+                        lb.ForeColor = Color.Aqua;
+                        lb.TextAlign = ContentAlignment.MiddleCenter;
+                        lb.Dock = DockStyle.Fill;
+                        lb.Anchor = AnchorStyles.Top & AnchorStyles.Right & AnchorStyles.Bottom & AnchorStyles.Left;
+                        lb.Font = new Font(IsDefaultFonts ? FontFamily.GenericMonospace : _privateFontCollection.Families.GetOfIndex(0, FontFamily.GenericMonospace), 32f);
+                        panel1.Controls.Add(lb);
+                        //lb.XCentre();
+                        //lb.YCentre();
+                    }
+                }
+            }
+            catch { }
+
             timer1.Start();
         }
 
@@ -42,7 +83,9 @@ namespace DallasMicrofOperator
 
         void DrawNumbers(Graphics g, string number)
         {
-            float FS = ((Width > 500 ? Width : 500) / number.Length) / 2f;
+            float FS1 = ((Width > 400 ? Width : 400) / number.Length-1) / 1.3f;
+            float FS2 = ((Height > 400 ? Height : 400) / number.Length-1) / 1f;
+            float FS = Math.Max(FS1, FS2) * (float)kF;
             Brush br = Brushes.Green;
             if (temper != "" && temper != "----" && float.Parse(temper) >= set.Red)
                 br = Brushes.Red;
@@ -52,9 +95,22 @@ namespace DallasMicrofOperator
                 br = Brushes.MediumBlue;
             else if (temper == "" || temper == "----")
                 br = Brushes.Blue;
-            g.Clear(Color.Black);
-            g.DrawString(number, new Font(_privateFontCollection.Families[0], FS, FontStyle.Regular), br, panel1.Width / 2f - (number.Length * FS)/2.8f, panel1.ClientSize.Height / 5f);
-            //g.DrawString("< " + set.Alarms.Min(tmp => tmp.Minimum).ToString() + " " + "> " + set.Alarms.Max(tmp => tmp.Maximum).ToString(), new Font(_privateFontCollection.Families[1], FS, FontStyle.Regular), Brushes.Gray, new PointF(panel1.Width / 2f - (number.Length * FS)/2.8f, panel1.Height - FS - 10f));
+            g.Clear(BackColors);
+
+            if (AutoResize)
+            {
+                g.DrawString(number, new Font(IsDefaultFonts ? FontFamily.GenericMonospace : _privateFontCollection.Families.GetOfIndex(0, FontFamily.GenericMonospace), FS, FontStyle.Regular), br, panel1.Width / 2f - (number.Length * FS) / 2.8f, panel1.ClientSize.Height / 5f);
+                //g.DrawString("< " + set.Alarms.Min(tmp => tmp.Minimum).ToString() + " " + "> " + set.Alarms.Max(tmp => tmp.Maximum).ToString(), new Font(_privateFontCollection.Families[1], FS, FontStyle.Regular), Brushes.Gray, new PointF(panel1.Width / 2f - (number.Length * FS)/2.8f, panel1.Height - FS - 10f));
+            }
+            else
+            { 
+                var lb = panel1.Controls.Find("ShefTTT", false)[0] as Label;
+                lb.Font = new Font(IsDefaultFonts ? FontFamily.GenericMonospace : _privateFontCollection.Families.GetOfIndex(0, FontFamily.GenericMonospace), FS);                
+                lb.ForeColor = new Pen(br).Color;
+                lb.Text = number;
+                lb.XCentre();
+                lb.YCentre();
+            }
         }
 
         private PrivateFontCollection _privateFontCollection = new PrivateFontCollection();
@@ -129,7 +185,7 @@ namespace DallasMicrofOperator
         void Print()
         {
             DrawNumbers(graphics, temper != "" && temper != "----" ? temper.Replace(',', '\'') + "°C" : "----");
-            if(set.IsLog) data.AddLog("Temperature Read", set.RemoteServers[id], temper);
+            if(set.IsLog) data.AddLog("Temperature:", set.RemoteServers[id], temper);
         }
 
         private void panel1_Paint(object sender, PaintEventArgs e)
